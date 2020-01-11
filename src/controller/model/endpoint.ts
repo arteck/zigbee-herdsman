@@ -149,7 +149,7 @@ class Endpoint extends Entity {
         if (!this.clusters[cluster.name]) this.clusters[cluster.name] = {attributes: {}};
 
         for (const [attribute, value] of Object.entries(list)) {
-            this.clusters[cluster.name].attributes[attribute] = value;
+            this.clusters[cluster.name].attributes[attribute] = value.data;
         }
     }
 
@@ -169,7 +169,7 @@ class Endpoint extends Entity {
 
     public async write(
         clusterKey: number | string, attributes: KeyValue, options?: Options
-    ): Promise<void> {
+    ): Promise<KeyValue> {
         options = this.getOptionsWithDefaults(options, true);
         const cluster = Zcl.Utils.getCluster(clusterKey);
         const payload: {attrId: number; dataType: number; attrData: number| string | boolean}[] = [];
@@ -188,9 +188,14 @@ class Endpoint extends Entity {
             Zcl.FrameType.GLOBAL, Zcl.Direction.CLIENT_TO_SERVER, options.disableDefaultResponse,
             options.manufacturerCode, ZclTransactionSequenceNumber.next(), 'write', cluster.ID, payload
         );
-        await Entity.adapter.sendZclFrameNetworkAddressWithResponse(
+        const result = await Entity.adapter.sendZclFrameNetworkAddressWithResponse(
             this.deviceNetworkAddress, this.ID, frame, options.timeout, options.defaultResponseTimeout
         );
+        if (options.disableDefaultResponse && result.frame.Header.commandIdentifier === 0x0b) {
+            // device responds with defaultResponse in case of UnsupportedCluster,..
+            return {error: 'Write failed', statusCode: result.frame.Payload.statusCode}
+        }
+        return ZclFrameConverter.attributeKeyValue(result.frame, false);
     }
 
     public async read(
@@ -210,7 +215,11 @@ class Endpoint extends Entity {
         const result = await Entity.adapter.sendZclFrameNetworkAddressWithResponse(
             this.deviceNetworkAddress, this.ID, frame, options.timeout, options.defaultResponseTimeout,
         );
-        return ZclFrameConverter.attributeKeyValue(result.frame);
+        if (options.disableDefaultResponse && result.frame.Header.commandIdentifier === 0x0b) {
+            // device responds with defaultResponse in case of UnsupportedCluster,..
+            return {error: 'Read failed', statusCode: result.frame.Payload.statusCode}
+        }
+        return ZclFrameConverter.attributeKeyValue(result.frame, false);
     }
 
     public async readResponse(
@@ -327,9 +336,10 @@ class Endpoint extends Entity {
             Zcl.FrameType.GLOBAL, Zcl.Direction.CLIENT_TO_SERVER, options.disableDefaultResponse,
             options.manufacturerCode, ZclTransactionSequenceNumber.next(), 'configReport', cluster.ID, payload
         );
-        await Entity.adapter.sendZclFrameNetworkAddressWithResponse(
+        const result = await Entity.adapter.sendZclFrameNetworkAddressWithResponse(
             this.deviceNetworkAddress, this.ID, frame, options.timeout, options.defaultResponseTimeout,
         );
+        return result.frame.Payload;
     }
 
     public async command(
@@ -337,8 +347,8 @@ class Endpoint extends Entity {
     ): Promise<void | KeyValue> {
         const cluster = Zcl.Utils.getCluster(clusterKey);
         const command = cluster.getCommand(commandKey);
-        const hasResponse = command.hasOwnProperty('response');
-        options = this.getOptionsWithDefaults(options, hasResponse);
+        const hasResponse = command.hasOwnProperty('response') || !options.disableDefaultResponse;
+        options = this.getOptionsWithDefaults(options, !hasResponse);
 
         for (const parameter of command.parameters) {
             if (!payload.hasOwnProperty(parameter.name)) {
