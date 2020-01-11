@@ -1716,6 +1716,8 @@ const Cluster: {
             acCapacityFormat: {ID: 71, type: DataType.enum8},
             SinopeOccupancy: {ID: 1024, type: DataType.enum8, manufacturerCode: ManufacturerCode.Sinope},
             SinopeBacklight: {ID: 1026, type: DataType.enum8, manufacturerCode: ManufacturerCode.Sinope},
+            StelproSystemMode: {ID: 0x401c, type: DataType.enum8},
+            StelproOutdoorTemp: {ID: 0x4001, type: DataType.int16, manufacturerCode: ManufacturerCode.Stelpro},
         },
         commands: {
             setpointRaiseLower: {
@@ -3529,6 +3531,25 @@ const Cluster: {
         },
         commandsResponse: {
         }
+    },
+    manuSpecificLegrandDevices: {
+        ID: 0xfc01,
+        manufacturerCode: ManufacturerCode.LegrandNetatmo,
+        attributes: {
+            // attributes seems to vary depending on the device. Can't be static
+        },
+        commands: {
+        },
+        commandsResponse: {
+        }
+    },
+    wiserDeviceInfo: {
+        ID: 0xFE03, // 65027
+        attributes: {
+            deviceInfo: {ID: 32, type: DataType.charStr},
+        },
+        commands: {},
+        commandsResponse: {}
     },
 };
 

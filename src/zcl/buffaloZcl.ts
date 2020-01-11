@@ -110,9 +110,13 @@ class BuffaloZcl extends Buffalo {
         }
     }
 
-    private writeCharStr(value: string): void {
-        this.writeUInt8(value.length);
-        this.position += this.buffer.write(value, this.position, 'utf8');
+    private writeCharStr(value: string | number[]): void {
+        if (typeof value === 'string') {
+            this.writeUInt8(value.length);
+            this.position += this.buffer.write(value, this.position, 'utf8');
+        } else {
+            this.writeBuffer(value, value.length);
+        }
     }
 
     private readLongCharStr(): TsType.Value {
@@ -125,6 +129,11 @@ class BuffaloZcl extends Buffalo {
     private writeLongCharStr(value: string): void {
         this.writeUInt16(value.length);
         this.position += this.buffer.write(value, this.position, 'utf8');
+    }
+
+    private writeOctetStr(value: number[]): void {
+        this.writeUInt8(value.length);
+        this.writeBuffer(value, value.length);
     }
 
     private readExtensionFielSets(): TsType.Value {
@@ -223,7 +232,7 @@ class BuffaloZcl extends Buffalo {
     }
 
     public write(type: string, value: TsType.Value, options: BuffaloZclOptions): void {
-        // TODO: write for the following is missing: octetStr, struct, array (+ bag/set)
+        // TODO: write for the following is missing: struct, array (+ bag/set)
         type = aliases[type] || type;
 
         if (type === 'uint40') {
@@ -242,6 +251,8 @@ class BuffaloZcl extends Buffalo {
             return this.writeCharStr(value);
         } else if (type === 'longCharStr') {
             return this.writeLongCharStr(value);
+        } else if (type === 'octetStr') {
+            return this.writeOctetStr(value);
         } else if (type === 'USE_DATA_TYPE') {
             return this.writeUseDataType(value, options);
         } else {

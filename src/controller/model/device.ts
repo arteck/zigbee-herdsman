@@ -96,6 +96,7 @@ class Device extends Entity {
         manufacturerID: number, endpoints: Endpoint[], manufacturerName: string,
         powerSource: string, modelID: string, applicationVersion: number, stackVersion: number, zclVersion: number,
         hardwareVersion: number, dateCode: string, softwareBuildID: string, interviewCompleted: boolean, meta: KeyValue,
+        lastSeen: number,
     ) {
         super();
         this.ID = ID;
@@ -116,7 +117,7 @@ class Device extends Entity {
         this._interviewCompleted = interviewCompleted;
         this._interviewing = false;
         this.meta = meta;
-        this._lastSeen = null;
+        this._lastSeen = lastSeen;
     }
 
     public async createEndpoint(ID: number): Promise<Endpoint> {
@@ -159,7 +160,7 @@ class Device extends Entity {
             entry.id, entry.type, ieeeAddr, networkAddress, entry.manufId, endpoints,
             entry.manufName, entry.powerSource, entry.modelId, entry.appVersion,
             entry.stackVersion, entry.zclVersion, entry.hwVersion, entry.dateCode, entry.swBuildId,
-            entry.interviewCompleted, meta,
+            entry.interviewCompleted, meta, entry.lastSeen || null,
         );
     }
 
@@ -176,7 +177,7 @@ class Device extends Entity {
             modelId: this.modelID, epList, endpoints, appVersion: this.applicationVersion,
             stackVersion: this.stackVersion, hwVersion: this.hardwareVersion, dateCode: this.dateCode,
             swBuildId: this.softwareBuildID, zclVersion: this.zclVersion, interviewCompleted: this.interviewCompleted,
-            meta: this.meta,
+            meta: this.meta, lastSeen: this.lastSeen,
         };
     }
 
@@ -238,6 +239,7 @@ class Device extends Entity {
         const device = new Device(
             ID, type, ieeeAddr, networkAddress, manufacturerID, endpointsMapped, manufacturerName,
             powerSource, modelID, undefined, undefined, undefined, undefined, undefined, undefined, false, {},
+            null,
         );
 
         Entity.database.insert(device.toDatabaseEntry());
@@ -337,7 +339,24 @@ class Device extends Entity {
             }
         }
 
-        const activeEndpoints = await Entity.adapter.activeEndpoints(this.networkAddress);
+        // e.g. Xiaomi Aqara Opple devices fail to respond to the first active endpoints request, therefore try 2 times
+        // https://github.com/Koenkk/zigbee-herdsman/pull/103
+        let activeEndpoints;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                activeEndpoints = await Entity.adapter.activeEndpoints(this.networkAddress);
+                break;
+            } catch (error) {
+                debug(`Interview - active endpoints request failed for '${this.ieeeAddr}', attempt ${attempt + 1}`);
+            }
+        }
+        if (!activeEndpoints) {
+            throw new Error(`Interview failed because can not get active endpoints ('${this.ieeeAddr}')`);
+        }
+
+        // Make sure that the endpoint are sorted so that e.g. below modelID is read from the first endpoint.
+        activeEndpoints.endpoints.sort();
+
         // Some devices, e.g. TERNCY return endpoint 0 in the active endpoints request.
         // This is not a valid endpoint number according to the ZCL, requesting a simple descriptor will result
         // into an error. Therefore we filter it, more info: https://github.com/Koenkk/zigbee-herdsman/issues/82

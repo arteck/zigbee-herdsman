@@ -111,7 +111,7 @@ class Controller extends events.EventEmitter {
         this.adapter.on(AdapterEvents.Events.deviceLeave, this.onDeviceLeave.bind(this));
 
         if (startResult === 'reset') {
-            if (this.options.databaseBackupPath) {
+            if (this.options.databaseBackupPath && fs.existsSync(this.options.databasePath)) {
                 fs.copyFileSync(this.options.databasePath, this.options.databaseBackupPath);
             }
 
@@ -420,21 +420,29 @@ class Controller extends events.EventEmitter {
         let type: Events.MessagePayloadType = undefined;
         let data: KeyValue;
         let clusterName = undefined;
+        const meta: {zclTransactionSequenceNumber?: number} = {};
 
         if (this.isZclDataPayload(dataPayload, dataType)) {
             const frame = dataPayload.frame;
             const command = frame.getCommand();
             clusterName = frame.Cluster.name;
+            meta.zclTransactionSequenceNumber = frame.Header.transactionSequenceNumber;
 
             if (frame.isGlobal()) {
                 if (frame.isCommand('report')) {
                     type = 'attributeReport';
+                    data = ZclFrameConverter.attributeKeyValue(dataPayload.frame);
+                } else if (frame.isCommand('read')) {
+                    type = 'read';
                     data = ZclFrameConverter.attributeList(dataPayload.frame);
+                } else if (frame.isCommand('write')) {
+                    type = 'write';
+                    data = ZclFrameConverter.attributeKeyValue(dataPayload.frame);
                 } else {
                     /* istanbul ignore else */
                     if (frame.isCommand('readRsp')) {
                         type = 'readResponse';
-                        data = ZclFrameConverter.attributeList(dataPayload.frame);
+                        data = ZclFrameConverter.attributeKeyValue(dataPayload.frame);
                     }
                 }
             } else {
@@ -458,7 +466,7 @@ class Controller extends events.EventEmitter {
                     }
                 }
 
-                endpoint.saveClusterAttributeList(clusterName, data);
+                endpoint.saveClusterAttributeKeyValue(clusterName, data);
             }
         } else {
             type = 'raw';
@@ -476,7 +484,7 @@ class Controller extends events.EventEmitter {
             const linkquality = dataPayload.linkquality;
             const groupID = dataPayload.groupID;
             const eventData: Events.MessagePayload = {
-                type: type, device, endpoint, data, linkquality, groupID, cluster: clusterName
+                type: type, device, endpoint, data, linkquality, groupID, cluster: clusterName, meta
             };
 
             this.emit(Events.Events.message, eventData);
