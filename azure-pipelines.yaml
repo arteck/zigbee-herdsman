@@ -19,14 +19,5 @@ steps:
   displayName: 'Install dependencies'
 - bash: npm run build
   displayName: 'Build'
-- bash: npm run test-with-coverage
-  displayName: 'Test'
-- bash: npm run eslint
-  displayName: 'Lint'
-- task: Npm@1
-  inputs:
-    command: publish
-    publishEndpoint: npm
-  displayName: 'Publish to npm'
-  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'), ne(variables['Build.Reason'], 'PullRequest'))
+
 
